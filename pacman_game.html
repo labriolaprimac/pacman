@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pac-Man Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: Arial, sans-serif;
+            color: #fff;
+            touch-action: none;
+        }
+        
+        #gameInfo {
+            margin-bottom: 10px;
+            font-size: 20px;
+            display: flex;
+            gap: 30px;
+        }
+        
+        #gameCanvas {
+            border: 3px solid #00f;
+            background: #000;
+            max-width: 100%;
+            touch-action: none;
+        }
+        
+        #instructions {
+            margin-top: 15px;
+            font-size: 14px;
+            color: #aaa;
+            text-align: center;
+        }
+        
+        #joystick {
+            position: fixed;
+            bottom: 80px;
+            left: 80px;
+            width: 120px;
+            height: 120px;
+            display: none;
+        }
+        
+        #joystickBase {
+            position: absolute;
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 3px solid rgba(255, 255, 255, 0.4);
+            border-radius: 50%;
+        }
+        
+        #joystickStick {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.8);
+            border: 3px solid #fff;
+            border-radius: 50%;
+            top: 35px;
+            left: 35px;
+            transition: all 0.1s;
+        }
+        
+        @media (max-width: 768px) {
+            #joystick {
+                display: block;
+            }
+        }
+        
+        @media (min-width: 769px) {
+            #joystick {
+                display: block;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="gameInfo">
+        <div>Punteggio: <span id="score">0</span></div>
+        <div>Vite: <span id="lives">3</span></div>
+    </div>
+    <canvas id="gameCanvas" width="560" height="560"></canvas>
+    <div id="instructions">
+        💻 Frecce/Joystick | 📱 Joystick o Swipe
+    </div>
+    
+    <div id="joystick">
+        <div id="joystickBase"></div>
+        <div id="joystickStick"></div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const livesEl = document.getElementById('lives');
+        
+        const CELL = 28;
+        const ROWS = 20;
+        const COLS = 20;
+        
+        // Mappa del gioco (1=muro, 0=pallino, 2=spazio vuoto, 3=power pellet)
+        const originalMap = [
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,1],
+            [1,3,1,1,0,1,1,1,0,1,1,0,1,1,1,0,1,1,3,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,0,1,1,0,1,0,1,1,1,1,1,1,0,1,0,1,1,0,1],
+            [1,0,0,0,0,1,0,0,0,1,1,0,0,0,1,0,0,0,0,1],
+            [1,1,1,1,0,1,1,1,2,1,1,2,1,1,1,0,1,1,1,1],
+            [1,1,1,1,0,1,2,2,2,2,2,2,2,2,1,0,1,1,1,1],
+            [1,1,1,1,0,2,2,1,1,2,2,1,1,2,2,0,1,1,1,1],
+            [2,2,2,2,0,2,2,1,2,2,2,2,1,2,2,0,2,2,2,2],
+            [1,1,1,1,0,2,2,1,1,1,1,1,1,2,2,0,1,1,1,1],
+            [1,1,1,1,0,2,2,2,2,2,2,2,2,2,2,0,1,1,1,1],
+            [1,1,1,1,0,1,2,1,1,1,1,1,1,2,1,0,1,1,1,1],
+            [1,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,1],
+            [1,0,1,1,0,1,1,1,0,1,1,0,1,1,1,0,1,1,0,1],
+            [1,3,0,1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,3,1],
+            [1,1,0,1,0,1,0,1,1,1,1,1,1,0,1,0,1,0,1,1],
+            [1,0,0,0,0,1,0,0,0,1,1,0,0,0,1,0,0,0,0,1],
+            [1,0,1,1,1,1,1,1,0,1,1,0,1,1,1,1,1,1,0,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+        ];
+        
+        let gameMap = JSON.parse(JSON.stringify(originalMap));
+        let score = 0;
+        let lives = 3;
+        let gameStarted = false;
+        
+        let pacman = {
+            gridX: 10,
+            gridY: 15,
+            dir: 'right'
+        };
+        
+        let ghosts = [
+            {gridX: 9, gridY: 9, dir: 'left', color: '#f00'},
+            {gridX: 10, gridY: 9, dir: 'right', color: '#0ff'},
+            {gridX: 9, gridY: 10, dir: 'up', color: '#f0f'},
+            {gridX: 10, gridY: 10, dir: 'down', color: '#ffa500'}
+        ];
+        
+        let powerMode = false;
+        let powerTimer = 0;
+        let frameCount = 0;
+        let moveCounter = 0;
+        let ghostMoveCounter = 0;
+        
+        function drawMaze() {
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    if (gameMap[r][c] === 1) {
+                        ctx.fillStyle = '#00f';
+                        ctx.fillRect(c * CELL, r * CELL, CELL, CELL);
+                    } else if (gameMap[r][c] === 0) {
+                        ctx.fillStyle = '#fff';
+                        ctx.beginPath();
+                        ctx.arc(c * CELL + CELL/2, r * CELL + CELL/2, 3, 0, Math.PI * 2);
+                        ctx.fill();
+                    } else if (gameMap[r][c] === 3) {
+                        ctx.fillStyle = '#fff';
+                        ctx.beginPath();
+                        ctx.arc(c * CELL + CELL/2, r * CELL + CELL/2, 6, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            }
+        }
+        
+        function drawPacman() {
+            let mouth = Math.abs(Math.sin(frameCount * 0.15)) * 0.4;
+            ctx.fillStyle = '#ff0';
+            ctx.beginPath();
+            
+            let startAngle = mouth;
+            let endAngle = 2 * Math.PI - mouth;
+            
+            if (pacman.dir === 'left') {
+                startAngle = Math.PI + mouth;
+                endAngle = Math.PI - mouth;
+            } else if (pacman.dir === 'up') {
+                startAngle = Math.PI * 1.5 + mouth;
+                endAngle = Math.PI * 1.5 - mouth;
+            } else if (pacman.dir === 'down') {
+                startAngle = Math.PI * 0.5 + mouth;
+                endAngle = Math.PI * 0.5 - mouth;
+            }
+            
+            ctx.arc(pacman.gridX * CELL + CELL/2, pacman.gridY * CELL + CELL/2, CELL/2 - 2, startAngle, endAngle);
+            ctx.lineTo(pacman.gridX * CELL + CELL/2, pacman.gridY * CELL + CELL/2);
+            ctx.fill();
+        }
+        
+        function drawGhosts() {
+            ghosts.forEach(ghost => {
+                ctx.fillStyle = powerMode ? '#00f' : ghost.color;
+                ctx.beginPath();
+                ctx.arc(ghost.gridX * CELL + CELL/2, ghost.gridY * CELL + CELL/2, CELL/2 - 2, Math.PI, 0);
+                ctx.lineTo(ghost.gridX * CELL + CELL - 4, ghost.gridY * CELL + CELL - 4);
+                ctx.lineTo(ghost.gridX * CELL + CELL - 8, ghost.gridY * CELL + CELL/2 + 4);
+                ctx.lineTo(ghost.gridX * CELL + CELL/2 + 4, ghost.gridY * CELL + CELL - 4);
+                ctx.lineTo(ghost.gridX * CELL + CELL/2 - 4, ghost.gridY * CELL + CELL/2 + 4);
+                ctx.lineTo(ghost.gridX * CELL + 8, ghost.gridY * CELL + CELL - 4);
+                ctx.lineTo(ghost.gridX * CELL + 4, ghost.gridY * CELL + CELL/2 + 4);
+                ctx.closePath();
+                ctx.fill();
+                
+                if (!powerMode) {
+                    ctx.fillStyle = '#fff';
+                    ctx.fillRect(ghost.gridX * CELL + 8, ghost.gridY * CELL + 8, 4, 4);
+                    ctx.fillRect(ghost.gridX * CELL + 16, ghost.gridY * CELL + 8, 4, 4);
+                }
+            });
+        }
+        
+        function isWall(x, y) {
+            if (y < 0 || y >= ROWS || x < 0 || x >= COLS) return false;
+            return gameMap[y][x] === 1;
+        }
+        
+        function movePacman() {
+            moveCounter++;
+            if (moveCounter < 6) return; // Rallenta il movimento
+            moveCounter = 0;
+            
+            let newX = pacman.gridX;
+            let newY = pacman.gridY;
+            
+            if (pacman.dir === 'up') newY--;
+            else if (pacman.dir === 'down') newY++;
+            else if (pacman.dir === 'left') newX--;
+            else if (pacman.dir === 'right') newX++;
+            
+            // Gestione tunnel laterali
+            if (newX < 0) newX = COLS - 1;
+            if (newX >= COLS) newX = 0;
+            
+            // Controlla se può muoversi
+            if (!isWall(newX, newY)) {
+                pacman.gridX = newX;
+                pacman.gridY = newY;
+                
+                // Raccogli pallini
+                if (gameMap[pacman.gridY][pacman.gridX] === 0) {
+                    gameMap[pacman.gridY][pacman.gridX] = 2;
+                    score += 10;
+                    scoreEl.textContent = score;
+                } else if (gameMap[pacman.gridY][pacman.gridX] === 3) {
+                    gameMap[pacman.gridY][pacman.gridX] = 2;
+                    score += 50;
+                    scoreEl.textContent = score;
+                    powerMode = true;
+                    powerTimer = 200;
+                }
+            }
+        }
+        
+        function moveGhosts() {
+            ghostMoveCounter++;
+            if (ghostMoveCounter < 7) return;
+            ghostMoveCounter = 0;
+            
+            ghosts.forEach(ghost => {
+                // Cambia direzione casualmente
+                if (Math.random() < 0.1) {
+                    const dirs = ['up', 'down', 'left', 'right'];
+                    ghost.dir = dirs[Math.floor(Math.random() * dirs.length)];
+                }
+                
+                let newX = ghost.gridX;
+                let newY = ghost.gridY;
+                
+                if (ghost.dir === 'up') newY--;
+                else if (ghost.dir === 'down') newY++;
+                else if (ghost.dir === 'left') newX--;
+                else if (ghost.dir === 'right') newX++;
+                
+                // Tunnel
+                if (newX < 0) newX = COLS - 1;
+                if (newX >= COLS) newX = 0;
+                
+                if (!isWall(newX, newY)) {
+                    ghost.gridX = newX;
+                    ghost.gridY = newY;
+                } else {
+                    // Cambia direzione se colpisce un muro
+                    const dirs = ['up', 'down', 'left', 'right'];
+                    ghost.dir = dirs[Math.floor(Math.random() * dirs.length)];
+                }
+            });
+        }
+        
+        function checkCollisions() {
+            ghosts.forEach((ghost, i) => {
+                if (pacman.gridX === ghost.gridX && pacman.gridY === ghost.gridY) {
+                    if (powerMode) {
+                        ghost.gridX = 9 + (i % 2);
+                        ghost.gridY = 9 + Math.floor(i / 2);
+                        score += 200;
+                        scoreEl.textContent = score;
+                    } else {
+                        lives--;
+                        livesEl.textContent = lives;
+                        pacman.gridX = 10;
+                        pacman.gridY = 15;
+                        
+                        if (lives <= 0) {
+                            alert('Game Over! Punteggio: ' + score);
+                            resetGame();
+                        }
+                    }
+                }
+            });
+        }
+        
+        function resetGame() {
+            gameMap = JSON.parse(JSON.stringify(originalMap));
+            score = 0;
+            lives = 3;
+            scoreEl.textContent = score;
+            livesEl.textContent = lives;
+            pacman.gridX = 10;
+            pacman.gridY = 15;
+            pacman.dir = 'right';
+            powerMode = false;
+            gameStarted = false;
+            
+            ghosts = [
+                {gridX: 9, gridY: 9, dir: 'left', color: '#f00'},
+                {gridX: 10, gridY: 9, dir: 'right', color: '#0ff'},
+                {gridX: 9, gridY: 10, dir: 'up', color: '#f0f'},
+                {gridX: 10, gridY: 10, dir: 'down', color: '#ffa500'}
+            ];
+        }
+        
+        function gameLoop() {
+            frameCount++;
+            
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            drawMaze();
+            
+            if (gameStarted) {
+                movePacman();
+                moveGhosts();
+                checkCollisions();
+            }
+            
+            drawPacman();
+            drawGhosts();
+            
+            if (powerMode) {
+                powerTimer--;
+                if (powerTimer <= 0) powerMode = false;
+            }
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Eventi tastiera
+        document.addEventListener('keydown', (e) => {
+            gameStarted = true;
+            if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+                e.preventDefault();
+                pacman.dir = 'up';
+            } else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+                e.preventDefault();
+                pacman.dir = 'down';
+            } else if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+                e.preventDefault();
+                pacman.dir = 'left';
+            } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+                e.preventDefault();
+                pacman.dir = 'right';
+            }
+        });
+        
+        // Swipe sul canvas
+        let touchStartX = 0;
+        let touchStartY = 0;
+        
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+        });
+        
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+        });
+        
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            gameStarted = true;
+            
+            let touchEndX = e.changedTouches[0].clientX;
+            let touchEndY = e.changedTouches[0].clientY;
+            
+            let dx = touchEndX - touchStartX;
+            let dy = touchEndY - touchStartY;
+            
+            // Minimo 30px di swipe per registrare
+            if (Math.abs(dx) > 30 || Math.abs(dy) > 30) {
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    pacman.dir = dx > 0 ? 'right' : 'left';
+                } else {
+                    pacman.dir = dy > 0 ? 'down' : 'up';
+                }
+            }
+        });
+        
+        // Joystick virtuale
+        const joystick = document.getElementById('joystick');
+        const joystickStick = document.getElementById('joystickStick');
+        let joystickActive = false;
+        let joystickCenterX = 60;
+        let joystickCenterY = 60;
+        
+        // Touch events
+        joystick.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            joystickActive = true;
+            gameStarted = true;
+        });
+        
+        joystick.addEventListener('touchmove', (e) => {
+            if (!joystickActive) return;
+            e.preventDefault();
+            
+            const touch = e.touches[0];
+            const rect = joystick.getBoundingClientRect();
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
+            
+            updateJoystick(x, y);
+        });
+        
+        joystick.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            resetJoystick();
+        });
+        
+        // Mouse events
+        joystick.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            joystickActive = true;
+            gameStarted = true;
+        });
+        
+        joystick.addEventListener('mousemove', (e) => {
+            if (!joystickActive) return;
+            e.preventDefault();
+            
+            const rect = joystick.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            updateJoystick(x, y);
+        });
+        
+        joystick.addEventListener('mouseup', (e) => {
+            e.preventDefault();
+            resetJoystick();
+        });
+        
+        joystick.addEventListener('mouseleave', (e) => {
+            if (joystickActive) {
+                resetJoystick();
+            }
+        });
+        
+        document.addEventListener('mouseup', (e) => {
+            if (joystickActive) {
+                resetJoystick();
+            }
+        });
+        
+        document.addEventListener('touchend', (e) => {
+            if (joystickActive) {
+                resetJoystick();
+            }
+        });
+        
+        function updateJoystick(x, y) {
+            // Calcola la distanza dal centro
+            let dx = x - joystickCenterX;
+            let dy = y - joystickCenterY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // Limita il movimento entro il cerchio base
+            const maxDistance = 35;
+            if (distance > maxDistance) {
+                dx = (dx / distance) * maxDistance;
+                dy = (dy / distance) * maxDistance;
+            }
+            
+            // Muovi la pallina
+            joystickStick.style.left = (joystickCenterX + dx - 25) + 'px';
+            joystickStick.style.top = (joystickCenterY + dy - 25) + 'px';
+            
+            // Determina la direzione
+            if (distance > 15) {
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    pacman.dir = dx > 0 ? 'right' : 'left';
+                } else {
+                    pacman.dir = dy > 0 ? 'down' : 'up';
+                }
+            }
+        }
+        
+        function resetJoystick() {
+            joystickActive = false;
+            joystickStick.style.left = '35px';
+            joystickStick.style.top = '35px';
+        }
+        
+        gameLoop();
+    </script>
+</body>
+</html>
